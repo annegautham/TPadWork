@@ -1,13 +1,30 @@
 close all;
 
-% ranges = {5542:21494, 21494:37658, 37658:53513, 53513:69714}; %2.8 NF Ranges
-ranges = {10487:26574, 26574:42553, 42553:58608, 58608:74854}; %2.8 F Ranges
-% ranges = {13003:29132, 29132:45128, 45128:61195} %3.5 NF Ranges
-% ranges = {3160:19232, 19232:35196, 35196:51368, 51368:67149}; %3.5 F Ranges
+dataNF_1 = load("LDV Data\chrip30-340_NF_1.mat");
+dataNF_2 = load("LDV Data\chirp30-340_NF2.mat");
+dataNF_3 = load("LDV Data\chirp30-340_NF3.mat");
+dataF_1 = load("LDV Data\chirp30-340_F1.mat");
+dataF_2 = load("LDV Data\chirp30-340_F2.mat");
+dataF_3 = load("LDV Data\chirp30-340_F3.mat");
+
+% rangesNF_1 = {8495:24442, 24442:40375, 40375:56215, 56215:72166};
+% rangesNF_2 = {14920:31142, 31142:46854, 46854:62957};
+% rangesF_1 = {11207:27080, 27080:43001, 43001:58960, 58960:74979};
+% rangesF_2 = {5295:20119, 20119:36144, 36144:51994, 51994:67926};
+
+tempNF_1 = dataNF_1.temp;
+tempNF_2 = dataNF_2.temp;
+tempF_1 = dataF_1.temp;
+tempF_2 = dataF_2.temp;
+
+useRanges = rangesF_1;
+useTemp = tempF_1;
+
 sf = 125;
-numRange = length(ranges);
+numRange = length(useRanges);
 curr = 1;
-Fs = 5000; % sampling freq
+
+Fs = 10000; % sampling freq
 T = 1 / Fs;
 N = 2^14; %padding
 powerAccum = zeros(floor(N / 2) + 1, 1);
@@ -16,8 +33,13 @@ fftImagAccum = zeros(N, 1);
 f = Fs * (0:(floor(N / 2))) / N;
 
 
+tempNF_1 = lowpass(tempNF_1, 1000, Fs);
+tempNF_2 = lowpass(tempNF_2, 1000, Fs);
+tempF_1 = lowpass(tempF_1, 1000, Fs);
+tempF_2 = lowpass(tempF_2, 1000, Fs);
+
 for i = 1:numRange
-    rangeSignal = temp(ranges{i})*sf;
+    rangeSignal = useTemp(useRanges{i})*sf;
     rangeSignal = rangeSignal - mean(rangeSignal);
     % truncate or add zero pad to signal
     if length(rangeSignal) > N
@@ -48,15 +70,15 @@ plot(f, avePower);
 xlabel('Frequency (Hz)');
 ylabel('Power');
 title('Averaged Velocity Signal Power Spectrum (0–5000 Hz)');
-xlim([0 5000]);
+xlim([0 1000]);
 
 % Plot averaged phase spectrum
 figure;
-plot(f, avePhase);
+plot(f, unwrap(avePhase));
 xlabel('Frequency (Hz)');
 ylabel('Phase (radians)');
 title('Averaged Velocity Signal Phase Spectrum (0–5000 Hz)');
-xlim([0 5000]);
+xlim([0 1000]);
 
 
 %%%Reconstructed Average Velocity Signal from Averaged FFTPower + Phase
@@ -80,15 +102,15 @@ xlim([0 N]);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Current Velocity / Position
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Work
-velocity = temp(ranges{curr})*sf;
+velocity = useTemp(useRanges{curr})*sf;
 velocity = velocity - mean(velocity);
 % % % FIR Highpass Filter Design
-% order = 700; % wo finger
-% cutoffFreq = 11 / (Fs/2);
-% b = fir1(order, cutoffFreq, 'high');
-% velocityhp = filter(b, 1, velocity);
+order = 700; % wo finger
+cutoffFreq = 11 / (Fs/2);
+b = fir1(order, cutoffFreq, 'high');
+velocityhp = filter(b, 1, velocity);
 
-velocityhp = velocity;
+% velocityhp = velocity;
 
 figure;
 plot(velocity);
@@ -112,7 +134,7 @@ plot(f, p1.^2);
 xlabel('Frequency (Hz)');
 ylabel('Power');
 title('Current Velocity Power Spectrum');
-xlim([0 5000]);
+xlim([0 1000]);
 
 %%%%%%%%%%%%%Integrating to find position
 figure;
@@ -156,7 +178,7 @@ xlim([0 500]);
 
 % Plot Phase Spectrum of HighPassed Displacement
 figure;
-plot(f_disp, phase_disp_hp(1:floor(L / 2) + 1));
+plot(f_disp, unwrap(phase_disp_hp(1:floor(L / 2) + 1)));
 hold on;
 a = 1;
 for k = -a:a
