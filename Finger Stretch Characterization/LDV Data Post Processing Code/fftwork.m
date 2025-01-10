@@ -1,30 +1,30 @@
 close all;
 
-dataNF_1 = load("LDV Data\chrip30-340_NF_1.mat");
-dataNF_2 = load("LDV Data\chirp30-340_NF2.mat");
-dataNF_3 = load("LDV Data\chirp30-340_NF3.mat");
-dataF_1 = load("LDV Data\chirp30-340_F1.mat");
-dataF_2 = load("LDV Data\chirp30-340_F2.mat");
-dataF_3 = load("LDV Data\chirp30-340_F3.mat");
+dataNF1 = load("LDV Data\chirp30-340_NF1.mat");
+dataNF2 = load("LDV Data\chirp30-340_NF2.mat");
+dataNF3 = load("LDV Data\chirp30-340_NF3.mat");
+dataF1 = load("LDV Data\chirp30-340_F1.mat");
+dataF2 = load("LDV Data\chirp30-340_F2.mat");
+dataF3 = load("LDV Data\chirp30-340_F3.mat");
 
-% rangesNF_1 = {8495:24442, 24442:40375, 40375:56215, 56215:72166};
-% rangesNF_2 = {14920:31142, 31142:46854, 46854:62957};
-% rangesF_1 = {11207:27080, 27080:43001, 43001:58960, 58960:74979};
-% rangesF_2 = {5295:20119, 20119:36144, 36144:51994, 51994:67926};
+rangesNF1 = {22181:38248, 47559:63730, 63750:79648, 259547:275641, 275641:291558};
+rangesNF2 = {20700:36288, 62239:78065, 86415:103167,103167:119047, 128481:144726, 144726:160340, 173287:190084, 190084:205850, 230417:246542, 269287:284896};
+rangesNF3 = {22761:38662, 46503:63606, 99837:115870, 141154:157099, 164834:181666, 181666:197500, 205996:222812,222812:238710, 238710:254834, 262562:279377, 279377:295127};
+% rangesF1 = {};
+% rangesF2 = {};
+% rangesF3 = {};
 
-tempNF_1 = dataNF_1.temp;
-tempNF_2 = dataNF_2.temp;
-tempF_1 = dataF_1.temp;
-tempF_2 = dataF_2.temp;
-
-useRanges = rangesF_1;
-useTemp = tempF_1;
+tempNF1 = dataNF1.temp;
+tempNF2 = dataNF2.temp;
+tempNF3 = dataNF3.temp;
+tempF1 = dataF1.temp;
+tempF2 = dataF2.temp;
+tempF3 = dataF3.temp;
 
 sf = 125;
-numRange = length(useRanges);
-curr = 1;
 
-Fs = 10000; % sampling freq
+curr = 1;
+Fs = 5000; % sampling freq
 T = 1 / Fs;
 N = 2^14; %padding
 powerAccum = zeros(floor(N / 2) + 1, 1);
@@ -33,10 +33,17 @@ fftImagAccum = zeros(N, 1);
 f = Fs * (0:(floor(N / 2))) / N;
 
 
-tempNF_1 = lowpass(tempNF_1, 1000, Fs);
-tempNF_2 = lowpass(tempNF_2, 1000, Fs);
-tempF_1 = lowpass(tempF_1, 1000, Fs);
-tempF_2 = lowpass(tempF_2, 1000, Fs);
+tempNF1 = lowpass(tempNF1, 1000, Fs);
+tempNF2 = lowpass(tempNF2, 1000, Fs);
+tempNF3 = lowpass(tempNF2, 1000, Fs);
+tempF1 = lowpass(tempF1, 1000, Fs);
+tempF2 = lowpass(tempF2, 1000, Fs);
+tempF3 = lowpass(tempF2, 1000, Fs);
+
+useRanges = rangesNF2;
+numRange = length(useRanges);
+useTemp = tempNF2;
+
 
 for i = 1:numRange
     rangeSignal = useTemp(useRanges{i})*sf;
@@ -190,3 +197,14 @@ title('Phase Spectrum of HP Displacement (With Finger)');
 xlabel('Frequency (Hz)');
 ylabel('Phase (radians)');
 xlim([0 500]);
+
+window = hamming(256);
+noverlap = 128;
+nfft = 1024;
+figure;
+spectrogram(useTemp(useRanges{curr}), window, noverlap, nfft, Fs);
+[s, f, t, p] = spectrogram(useTemp(useRanges{curr}), window, noverlap, nfft, Fs);
+
+figure; 
+spectrogram(real(aveVelocity_reconstructed), window, noverlap, nfft, Fs);
+[save, fave, tave, pave] = spectrogram(real(aveVelocity_reconstructed), window, noverlap, nfft, Fs);

@@ -1,18 +1,6 @@
-% Parameters
-Fs = 10000; % Sampling frequency
-Fc = 1000;  % Lowpass cutoff frequency
-windowLength = 1024; % Spectrogram window length
-overlap = 768; % Overlap for spectrogram
-fftPoints = 2048; % FFT points for resolution
-
-% Generate Spectrogram
-[s, f, t] = spectrogram(signal, windowLength, overlap, fftPoints, Fs);
-
 % Frequency Range for THD Analysis
 freqCenters = 10:20:350; % Frequency centers (10, 30, ..., 350 Hz)
 bandWidth = 10; % Half-width of each frequency band
-
-% Initialize THD Results
 thdValues = [];
 
 % Compute THD for Each Frequency Band
