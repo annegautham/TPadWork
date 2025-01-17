@@ -69,5 +69,5 @@ void chirpGen(float freq1, float finalFreq, float timeDelay, float amplitude) {
 }
 
 void loop() {
-  chirpGen(30, 100, 7.5, 2.5);
+  sinGen(250, 2);
 }

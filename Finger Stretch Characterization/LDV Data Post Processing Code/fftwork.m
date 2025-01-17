@@ -26,7 +26,7 @@ tempBox = dataBox.temp;
 
 sf = 125;
 
-curr = 1;
+curr = 2;
 Fs = 5000; % sampling freq
 T = 1 / Fs;
 N = 2^14; %padding
@@ -44,9 +44,9 @@ tempF2 = lowpass(tempF2, 1000, Fs);
 tempF3 = lowpass(tempF2, 1000, Fs);
 tempBox = lowpass(tempBox, 1000, Fs);
 
-useRanges = rangesBox;
+useRanges = rangesNF2;
 numRange = length(useRanges);
-useTemp = tempBox;
+useTemp = tempNF2;
 
 
 for i = 1:numRange
