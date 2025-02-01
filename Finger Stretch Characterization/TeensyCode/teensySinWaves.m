@@ -1,28 +1,18 @@
-% Parameters
-Fs = 50000; % Sampling frequency (Hz)
-f = 100;    % Sine wave frequency (Hz)
-duration = 10; % Duration in seconds
-amplitude = 2047; % Max value for 12-bit DAC (half-scale for sine wave)
+function sendSineWithEnvelope(serialPort, freq, amplitude, duration, fs)
+    % Generates and sends a sine wave with a fade-in and fade-out envelope
+    % Parameters:
+    % - serialPort: Serial port object
+    % - freq: Frequency of the sine wave (Hz)
+    % - amplitude: Maximum amplitude of the signal (0 to 1)
+    % - duration: Duration of the sine wave (seconds)
+    % - fs: Sampling frequency (Hz)
 
-% Generate time vector
-t = 0:1/Fs:duration - 1/Fs;
+    t = 0:1/fs:duration; % Time vector
+    sineSignal = amplitude * sin(2 * pi * freq * t); % Generate sine wave
 
-% Generate sine wave (scaled for 12-bit DAC)
-sineWave = amplitude * (1 + sin(2 * pi * f * t)); % Offset to avoid negative values
+    % Create envelope (triangular shape: fade-in and fade-out)
+    envelope = 1 - abs(2 * t / duration - 1); % Linear fade-in and fade-out
+    sineSignal = sineSignal .* envelope; % Apply envelope
 
-% Open serial connection to Teensy
-serialPort = 'COM4'; % Replace with your Teensy COM port
-baudRate = 115200;
-s = serialport(serialPort, baudRate);
-
-% Send data to Teensy
-for i = 1:length(sineWave)
-    % Scale and send data as 16-bit integers
-    value = uint16(sineWave(i));
-    write(s, value, 'uint16');
-    pause(1/Fs); % Ensure correct timing
+    sendToTeensy(serialPort, sineSignal, fs);
 end
-
-% Close serial connection after the duration
-clear s;
-disp('Sine wave transmission complete.');

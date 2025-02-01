@@ -1,33 +1,48 @@
-data = readtable('TEAX19C01-8_impedance', 'Format', '%f %f %f', 'HeaderLines', 1); 
+clear; close all; clc;
 
-freq = data{:, 1};
-ohm = data{:, 2};
-phase = data{:,3};
-cuttoff = 2000;
-range = freq <= cuttoff;
-freq = freq(range);
-ohm = ohm(range);
-phase = phase(range);
-
-freq_interp = linspace(min(freq), max(freq), 10^3);
-ohm_interp = interp1(freq, ohm, freq_interp, 'spline');
-phase_interp = interp1(freq, phase, freq_interp, 'spline');
-save('interpolatedImpedance_data.mat', 'freq_interp', 'ohm_interp');
+K_values = [0.5, 1.0, 2.0, 6.5e-2];
+t = 0:0.01:150;
+numPlots = length(K_values);
 
 figure;
-plot(freq, ohm, 'o', freq_interp, ohm_interp, '-');
-xlabel('Frequency (Hz)');
-ylabel('Impedance (Ohms)');
-title('Impedance vs. Frequency');
-legend('OG Data', 'Interp');
-xticks(0:100:cuttoff); 
-yticks(min(ohm):10:max(ohm));
+sgtitle('Step Response for Different K Values');
 
-figure;
-plot(freq, phase, 'o', freq_interp, phase_interp, '-');
-xlabel('Frequency (Hz)');
-ylabel('Phase (Rad)');
-title('Phase vs. Frequency');
-legend('OG Data', 'Interp');
-xticks(0:100:cuttoff); 
-yticks(min(phase):10:max(phase));
+for i = 1:numPlots
+    K = K_values(i);
+    wn = sqrt(0.2 * K);
+   
+    num = wn^2;
+    den = [1, 0.104, wn^2];
+    sys = tf(num, den);
+    
+    % Compute step response
+    [y, t_out] = step(sys, t);
+    
+    % Compute overshoot
+    zeta = 0.104 / (2 * wn);
+    if zeta < 1
+        Mp = (max(y) - 1) * 100;
+        overshootText = sprintf('Max Overshoot: %.2f%%', Mp);
+    else
+        overshootText = 'No Overshoot';
+    end
+    
+    % rise time (from 10% to 90%)
+    y_final = y(end);
+    idx_10 = find(y >= 0.1 * y_final, 1);
+    idx_90 = find(y >= 0.9 * y_final, 1);
+    tr = t_out(idx_90) - t_out(idx_10);
+    risetimeText = sprintf('Rise Time: %.2f sec', tr);
+    
+    %plot
+    subplot(2, 2, i);
+    plot(t_out, y, 'b', 'LineWidth', 1.5);
+    grid on;
+    title(sprintf('K = %.4f', K));
+    xlabel('Time (s)');
+    ylabel('Response');
+    
+    %show overshoot
+    text(0.05 * max(t), 0.85 * max(y), overshootText, 'FontSize', 10);
+    text(0.05 * max(t), 0.75 * max(y), risetimeText, 'FontSize', 10);
+end
