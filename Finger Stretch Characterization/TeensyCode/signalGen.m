@@ -1,49 +1,65 @@
-function funs = signalGen()
-    % Returns a struct of function handles for generating signals
-    funs.sineWithEnvelope = @sineWithEnvelope;
-    funs.chirpWithEnvelope = @chirpWithEnvelope;
+function funs = signalGen(serialPort)
+    funs.sineWithEnvelope = @(freq, amplitude, duration, fs) ...
+        sendSignal(sineWithEnvelope(freq, amplitude, duration, fs), serialPort, fs);
+    
+    funs.chirpWithEnvelope = @(freqStart, freqEnd, amplitude, duration, fs) ...
+        sendSignal(chirpWithEnvelope(freqStart, freqEnd, amplitude, duration, fs), serialPort, fs);
 end
 
-%% Sine wave with Tukey window envelope
+%% **Sine wave with Tukey envelope**
 function [signal, t] = sineWithEnvelope(freq, amplitude, duration, fs)
-    t = 0:1/fs:duration; % Time vector
-    sineSignal = amplitude * sin(2 * pi * freq * t); % Generate sine wave
-    rampTime = 0.25;
-    tukeyAlpha = min(1, (rampTime * 2 / duration)); % Ensure alpha ≤ 1
-    envelope = tukeywin(length(t), tukeyAlpha)'; % Tukey window as row vector
-    signal = sineSignal .* envelope; % Apply envelope
-    titleStr = sprintf('Freq: %.2f Hz, Amplitude: %.1f V', freq, amplitude);
-    plotSignal(t, signal, titleStr);
+    t = 0:1/fs:duration;
+    sineSignal = amplitude * sin(2 * pi * freq * t); 
+    envelope = tukeywin(length(t), min(1, 0.5 / duration))';  % Tukey window
+    signal = sineSignal .* envelope;  
+    signal = sineSignal;
+    [signal, t] = scaleSignal(signal, amplitude, t);
 end
 
-%% Chirp signal with Tukey window envelope
+%% **Chirp signal with Tukey envelope**
 function [signal, t] = chirpWithEnvelope(freqStart, freqEnd, amplitude, duration, fs)
-    t = 0:1/fs:duration; % Time vector
-    chirpSignal = amplitude * chirp(t, freqStart, duration, freqEnd); % Generate chirp
-    rampTime = 0.25;
-    tukeyAlpha = min(1, (rampTime * 2 / duration)); % Ensure alpha ≤ 1
-    envelope = tukeywin(length(t), tukeyAlpha)'; % Tukey window as row vector
-    signal = chirpSignal .* envelope; % Apply envelope
-    titleStr = sprintf('Freq: %.2f to %.2f Hz, Amplitude: %.1f V', freqStart, freqEnd, amplitude);
-    plotSignal(t, signal, titleStr);
+    t = 0:1/fs:duration;
+    chirpSignal = amplitude * chirp(t, freqStart, duration, freqEnd);
+    envelope = tukeywin(length(t), min(1, 0.5 / duration))';
+    signal = chirpSignal .* envelope;
+    signal = chirpSignal;
+    [signal, t] = scaleSignal(signal, amplitude, t);
 end
 
-%% Function to send signal to Teensy
-function sendToTeensy(serialPort, signal, fs)
-    signal = (signal + 1) / 2; % Scale to 0-1
-    signal = uint16(signal * 4095); % Convert to 12-bit DAC values
-    for i = 1:length(signal)
-        highByte = bitshift(signal(i), -8);
-        lowByte = bitand(signal(i), 255);
-        write(serialPort, [highByte, lowByte], "uint8");
-        pause(1/fs);
+%% **Scale signal to 12-bit DAC (0-4095)**
+function [scaledSignal, t] = scaleSignal(signal, amplitude, t)
+    DAC_max = 4095;  % 12-bit DAC resolution
+    V_ref = 3.3;  % Teensy DAC reference voltage
+
+    % Normalize by actual max amplitude (not forcing full scale)
+    signal_max = max(abs(signal));  % Find peak
+    if signal_max == 0
+        signal_max = 1;  % Avoid divide-by-zero
     end
+
+    % Scale based on requested amplitude
+    scaleFactor = (amplitude / V_ref);  % Convert to DAC proportion
+    scaledSignal = round((signal / signal_max) * (DAC_max / 2) * scaleFactor + (DAC_max / 2));
+
+    % Ensure values stay in range
+    scaledSignal = max(0, min(scaledSignal, DAC_max));
 end
 
-function plotSignal(t, signal, titleStr)
+
+
+%% **Send signal to Teensy**
+function sendSignal(signal, serialPort, fs)
+    t = (0:length(signal)-1) / fs;  % Time axis
     figure;
     plot(t, signal, 'LineWidth', 1.2);
     xlabel('Time (s)');
-    ylabel('Amplitude');
-    title(titleStr);
+    ylabel('Amplitude (DAC units)');
+
+    serialObj = serialport(serialPort, 115200);
+    pause(2);  
+    csvData = sprintf('%d,', signal);
+    writeline(serialObj, csvData(1:end-1));
+    writeline(serialObj, "END");
+    pause(1);
+    clear serialObj;
 end
