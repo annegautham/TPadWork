@@ -2,8 +2,11 @@ function funs = signalGen(serialPort)
     funs.sineWithEnvelope = @(freq, amplitude, duration, fs) ...
         sendSignal(sineWithEnvelope(freq, amplitude, duration, fs), serialPort, fs);
     
-    funs.chirpWithEnvelope = @(freqStart, freqEnd, amplitude, duration, fs) ...
-        sendSignal(chirpWithEnvelope(freqStart, freqEnd, amplitude, duration, fs), serialPort, fs);
+    funs.lin_chirpWithEnvelope = @(freqStart, freqEnd, amplitude, duration, fs) ...
+        sendSignal(lin_chirpWithEnvelope(freqStart, freqEnd, amplitude, duration, fs), serialPort, fs);
+
+    funs.exp_chirpWithEnvelope = @(freqStart, freqEnd, amplitude, duration, fs) ...
+        sendSignal(exp_chirpWithEnvelope(freqStart, freqEnd, amplitude, duration, fs), serialPort, fs);
 end
 
 %% **Sine wave with Tukey envelope**
@@ -11,18 +14,27 @@ function [signal, t] = sineWithEnvelope(freq, amplitude, duration, fs)
     t = 0:1/fs:duration;
     sineSignal = amplitude * sin(2 * pi * freq * t); 
     envelope = tukeywin(length(t), min(1, 0.5 / duration))';  % Tukey window
-    signal = sineSignal .* envelope;  
-    signal = sineSignal;
+    signal = sineSignal .* envelope;
     [signal, t] = scaleSignal(signal, amplitude, t);
 end
 
-%% **Chirp signal with Tukey envelope**
-function [signal, t] = chirpWithEnvelope(freqStart, freqEnd, amplitude, duration, fs)
+%% **Linear Chirp signal with Tukey envelope**
+function [signal, t] = lin_chirpWithEnvelope(freqStart, freqEnd, amplitude, duration, fs)
     t = 0:1/fs:duration;
     chirpSignal = amplitude * chirp(t, freqStart, duration, freqEnd);
     envelope = tukeywin(length(t), min(1, 0.5 / duration))';
     signal = chirpSignal .* envelope;
-    signal = chirpSignal;
+    %signal = chirpSignal;
+    [signal, t] = scaleSignal(signal, amplitude, t);
+end
+
+%% **Exponential Chirp signal with Tukey envelope**
+function [signal, t] = exp_chirpWithEnvelope(freqStart, freqEnd, amplitude, duration, fs)
+    t = 0:1/fs:duration;
+    chirpSignal = amplitude * chirp(t, freqStart, duration, freqEnd);
+    envelope = tukeywin(length(t), min(1, 0.5 / duration))';
+    signal = chirpSignal .* envelope;
+    %signal = chirpSignal;
     [signal, t] = scaleSignal(signal, amplitude, t);
 end
 

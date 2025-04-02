@@ -8,7 +8,7 @@ dq = daq("ni");
 
 time = 10;  
 num_trials = 1;  % Define number of trials
-tvec = cell(1, num_trials);  % Store each time vector separately
+tvec = cell(1, num_trials);  % Store each time vardector separately
 tempVec = cell(1, num_trials);  % Store each signal separately
 
 %% DAQ Configuration
@@ -27,7 +27,7 @@ end
 for i = 1:num_trials
     fprintf('Running chirp %d/%d...\n', i, num_trials);
     
-    funs.sineWithEnvelope(10, 3.3, 5, 10000);  % Start chirp signal
+    funs.lin_chirpWithEnvelope(30, 350, 0.8, 5, 10000);  % Start chirp signal
     disp('Recording...');
     
     Data_dq = read(dq, seconds(time));  % Read DAQ data
@@ -55,7 +55,7 @@ legend(arrayfun(@(x) sprintf('Trial %d', x), 1:num_trials, 'UniformOutput', fals
 hold off;
 
 %% Save Data
-save('trials.mat', 'tempVec', 'tvec', '-v7.3');
+save('30-350_DAC_Output.mat', 'tempVec', 'tvec', '-v7.3');
 
 %% Function to Clear Serial Port
 function clearSerialPort(port)

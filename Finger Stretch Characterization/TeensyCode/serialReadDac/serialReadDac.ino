@@ -18,7 +18,8 @@ void loop() {
     while (Serial.available()) {
         String data = Serial.readStringUntil('\n');  
         if (data == "END") {
-            Serial.flush();   
+            Serial.flush();  
+            delay(2000);
             outputSignal(buffer, count);  
             return;
         }
@@ -36,7 +37,7 @@ void outputSignal(int *buffer, int count) {
         writeDAC(buffer[i]);
         delayMicroseconds(100);  // Adjust for sampling rate
     }
-}
+}`
 
 void writeDAC(uint16_t value) {
     digitalWrite(DAC_CS, LOW);

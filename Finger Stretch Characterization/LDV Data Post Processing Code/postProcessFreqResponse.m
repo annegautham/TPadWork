@@ -1,5 +1,5 @@
 signal = temp;
-Fs = 5000;
+Fs = 10000;
 T = 1/Fs;
 L = length(signal);
 t= (0:L-1)*T;
@@ -12,12 +12,12 @@ p1(2:end-1) = 2*p1(2:end-1);
 f = Fs*(0:(L/2))/L;
 figure;
 plot(f, p1.^2)
-title("150 Hz @ 16 V")
+title("Chirp")
 xlabel('Frequency (Hz)');
 ylabel('Power')
 
 figure;
-velocity = temp(1:500)*125;
+velocity = temp*125;
 
 order = 10;
 cutoffFreq = 10 / (Fs/2);
