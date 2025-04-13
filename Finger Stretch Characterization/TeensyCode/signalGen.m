@@ -24,7 +24,6 @@ function [signal, t] = lin_chirpWithEnvelope(freqStart, freqEnd, amplitude, dura
     chirpSignal = amplitude * chirp(t, freqStart, duration, freqEnd);
     envelope = tukeywin(length(t), min(1, 0.5 / duration))';
     signal = chirpSignal .* envelope;
-    %signal = chirpSignal;
     [signal, t] = scaleSignal(signal, amplitude, t);
 end
 

@@ -1,4 +1,4 @@
-% Example parameters
+ Example parameters
 fs = 5000; % Sampling frequency in Hz
 t = 0:300000; % Time vector for 10 seconds
 signal = useTemp;

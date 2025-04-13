@@ -7,14 +7,14 @@ funs = signalGen(serialPort);
 dq = daq("ni");
 
 time = 10;  
-num_trials = 5;  % Define number of trials
+num_trials = 2;  % Define number of trials
 tvec = cell(1, num_trials);       % Store each time vector separately
 outputVec = cell(1, num_trials);  % Store channel 13 (output)
 inputVec = cell(1, num_trials);   % Store channel 5 (input)
 
 %% DAQ Configuration
 dq.Rate = 10000;
-channel_list = [13, 1];  % Read from channels 13 and 5
+channel_list = [13, 5];  % Read from channels 13 and 5
 addinput(dq, "Dev1", channel_list, "Voltage");
 
 %% Countdown Timer
@@ -38,7 +38,7 @@ for i = 1:num_trials
     % Store data properly
     tvec{i} = Data_dq.Time * 1e3;  % Convert to milliseconds
     outputVec{i} = Data_dq.("Dev1_ai13");  % Channel 13
-    inputVec{i} = Data_dq.("Dev1_ai1");    % Channel 5
+    inputVec{i} = Data_dq.("Dev1_ai5");    % Channel 5
 end
 
 clearSerialPort(serialPort);  % Close serial port properly
@@ -68,7 +68,7 @@ legend(arrayfun(@(x) sprintf('Trial %d', x), 1:num_trials, 'UniformOutput', fals
 hold off;
 
 %% Save Data
-save('28.4g_30-350.mat', 'inputVec', 'outputVec', 'tvec', '-v7.3');
+save('newTeensy_30-350_dualChannel.mat', 'inputVec', 'outputVec', 'tvec', '-v7.3');
 
 %% Function to Clear Serial Port
 function clearSerialPort(port)
