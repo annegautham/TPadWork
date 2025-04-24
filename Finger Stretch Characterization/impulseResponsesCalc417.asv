@@ -1,0 +1,107 @@
+close all;
+% load('0g_30-350.mat');
+load('18g_30-350.mat');
+% load('24.4g_30-350.mat');
+% load('27g_30-350.mat');
+% load('28.4g_30-350.mat');
+Fs = 10000;
+Ts = 1/Fs;
+[in, tin] = chirpWithEnvelope(30, 350, 0.8, 5, 10000);
+
+raw = outputVec{1};
+raw = raw(:)';
+vel = (raw - mean(raw))*125;
+vel = lowpass(vel, 1000, Fs);
+
+%high pass
+order = 500;
+cuttoffFreq = 25/(5000/2);
+b = fir1(order, cuttoffFreq, 'high');
+vel = filter(b, 1, vel);
+
+%position
+figure;
+pos = cumsum(vel)*Ts;
+
+pos = pos - mean(pos);
+plot(pos)
+
+
+[cc, lags] = xcorr(pos, in, 'none');
+[~, max_idx] = max(abs(cc));
+lag = lags(max_idx);  % lag in samples
+if lag >= 0
+    pos = pos(lag+1:end);
+end
+N_sync = min(length(in), length(pos));
+in  = in(1:N_sync);
+pos = pos(1:N_sync);
+
+
+figure;
+hold on;
+plot(in*0.5);
+plot(pos);
+
+%IR recover
+inv = fliplr(in);
+ir = conv(inv, pos);
+filt =2000;
+ir = ir(50000-5000:50000+5000);
+figure;
+hold on;
+plot(ir)
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+lin = conv(in, ir);
+sf = max(pos)/max(lin);
+lin = sf*lin;
+figure;
+plot(lin);
+hold on;
+plot(pos);
+legend('lin','pos');
+
+
+
+% 
+% 
+% %impuslse input
+% u = [1; zeros(length(ir)-1, 1)];
+% data = iddata(ir(:), u, Ts);
+% 
+% % Estimate transfer function model (start with 2 poles, 1 zero)
+% n = 2;  % number of poles
+% m = 0;  % number of zeros
+% tf = tfest(data, n, m);
+% 
+% % Display transfer function
+% disp(tf);
+% 
+% % Plot fit comparison
+% compare(data, tf);
+% 
+% % data = iddata(pos, in, Ts);
+% % 
+% % % Duration and sample count for plotting
+% % T_end = 1;                  % 5 seconds
+% % Fs = 1/Ts;                  % Sampling frequency
+% % N = round(T_end / Ts);      % Number of samples
+% % t = (0:N-1);             % Time vector
+% % 
+% % % 1. Estimate impulse response (non-parametric FIR model)
+% % model_ir = impulseest(data);
+% % 
+% % % 2. Estimate transfer function (parametric model)
+% % order = [2 0];              % [numOrder denOrder] — adjust as needed
+% % model_tf = tfest(data, order(1), order(2));
+% % 
+% % % 3. Simulate impulse responses
+% % [y_ir, t_ir] = impulse(model_ir, N);    % Impulse response from impulseest
+% % [y_tf, t_tf] = impulse(model_tf, N);    % Impulse response from tfest
+% % 
+% % % 4. Plot both impulse responses
+% % figure;
+% % % plot(t_ir, y_ir, 'b-', 'LineWidth', 2); hold on;
+% % plot(t_tf, y_tf);

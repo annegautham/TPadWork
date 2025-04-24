@@ -1,6 +1,6 @@
 close all
 
-fs = 5000;
+fs = 10000;
 Tchirp = 5;
 freqStart = 30;
 freqEnd = 350;
