@@ -8,6 +8,8 @@ Fs = 10000;
 Ts = 1/Fs;
 [in, tin] = chirpWithEnvelope(30, 350, 0.8, 5, 10000);
 
+
+
 raw = outputVec{1};
 raw = raw(:)';
 vel = (raw - mean(raw))*125;
@@ -76,6 +78,11 @@ spec(lin,Fs);
 
 % Define time vector for IR
 t = (-2500:2500) * Ts;
+% FFT of the impulse response
+L = length(ir);
+H = fft(ir, 2^nextpow2(L));  % Zero-padding for better frequency resolution
+f = Fs * (0:(length(ir)/2)) / length(ir);  % Frequency axis (up to Nyquist)
+
 
 % Define model function
 ir_model = @(p, t) p(1) * exp(-p(2)*t) .* sin(p(3)*t + p(4)) .* (t > 0);
@@ -119,7 +126,7 @@ fprintf('  ω_d   = %.2f rad/s\n', wd);
 % Calculate mass (m), spring constant (k), and damping coefficient (b)
 % Assuming typical system response characteristics
 % If you have an estimate for one of the parameters, use it, or assume reasonable values
-m = 18/1000;  % Example mass (kg), you can change this based on your system
+m = 28.4/1000;  % Example mass (kg), you can change this based on your system
 k = m * wn^2;   % Spring constant (N/m)
 b = 2 * zeta * sqrt(m * k);  % Damping coefficient (Ns/m)
 
@@ -131,10 +138,6 @@ fprintf('  Damping coefficient (b) = %.2f Ns/m\n', b);
 
 
 
-% FFT of the impulse response
-L = length(ir);
-H = fft(ir, 2^nextpow2(L));  % Zero-padding for better frequency resolution
-f = Fs * (0:(length(ir)/2)) / length(ir);  % Frequency axis (up to Nyquist)
 
 % Plot magnitude spectrum
 figure;
@@ -144,3 +147,26 @@ ylabel('Magnitude');
 title('Magnitude Spectrum of Impulse Response');
 grid on;
 
+% Compute fitted IR
+ir_fit = ir_model(p_fit, t);
+
+% Only consider t > 0
+idx_pos = t > 0;
+ir_trimmed = ir(idx_pos);
+ir_fit_trimmed = ir_fit(idx_pos);
+
+% Compute correlation coefficient on t > 0
+R = corrcoef(ir_trimmed, ir_fit_trimmed);
+corr_val = R(1, 2);
+
+% Display result
+fprintf('Correlation coefficient between measured and fitted IR (t > 0): %.4f\n', corr_val);
+
+% Optional: Annotate correlation on plot
+figure;
+plot(t, ir, 'k', 'DisplayName', 'Measured IR'); hold on;
+plot(t, ir_fit, 'r--', 'DisplayName', 'Fitted Model');
+legend;
+title(sprintf('Impulse Response Fit (Corr = %.4f)', corr_val));
+xlabel('Time (s)');
+ylabel('Amplitude');
