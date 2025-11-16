@@ -75,98 +75,98 @@ spec(pos,Fs);
 figure;
 spec(lin,Fs);
 
-
-% Define time vector for IR
-t = (-2500:2500) * Ts;
-% FFT of the impulse response
-L = length(ir);
-H = fft(ir, 2^nextpow2(L));  % Zero-padding for better frequency resolution
-f = Fs * (0:(length(ir)/2)) / length(ir);  % Frequency axis (up to Nyquist)
-
-
-% Define model function
-ir_model = @(p, t) p(1) * exp(-p(2)*t) .* sin(p(3)*t + p(4)) .* (t > 0);
-
-% Initial guess: [A, damping*wn, wd, phase]
-[~, idx_peak] = max(abs(fft(ir)));
-f_guess = f(idx_peak);
-p0 = [max(ir), 100, 2*pi*f_guess, 0];
-
-
-% Cost function
-cost = @(p) sum((ir(:) - ir_model(p, t(:))).^2);
-
-% Fit using fminsearch
-p_fit = fminsearch(cost, p0);
-
-% Plot fit
-figure;
-plot(t, ir, 'k', 'DisplayName', 'Measured IR'); hold on;
-plot(t, ir_model(p_fit, t), 'r--', 'DisplayName', 'Fitted Model');
-legend;
-title('Impulse Response Fit');
-
-% Extract fitted parameters
-A_fit = p_fit(1);
-damping_wn = p_fit(2);
-wd = p_fit(3);
-phi = p_fit(4);
-zeta = damping_wn / sqrt(wd^2 + damping_wn^2);
-wn = damping_wn / zeta;
-
-fprintf('Fitted parameters:\n');
-fprintf('  A     = %.4f\n', A_fit);
-fprintf('  ζ     = %.4f\n', zeta);
-fprintf('  ω_n   = %.2f rad/s\n', wn);
-fprintf('  f_n   = %.2f Hz\n', wn/(2*pi));
-fprintf('  ω_d   = %.2f rad/s\n', wd);
-
-
-
-% Calculate mass (m), spring constant (k), and damping coefficient (b)
-% Assuming typical system response characteristics
-% If you have an estimate for one of the parameters, use it, or assume reasonable values
-m = 28.4/1000;  % Example mass (kg), you can change this based on your system
-k = m * wn^2;   % Spring constant (N/m)
-b = 2 * zeta * sqrt(m * k);  % Damping coefficient (Ns/m)
-
-% Display results
-fprintf('Physical Parameters from fit:\n');
-fprintf('  Mass (m)       = %.2f kg\n', m);
-fprintf('  Spring constant (k) = %.2f N/m\n', k);
-fprintf('  Damping coefficient (b) = %.2f Ns/m\n', b);
-
-
-
-
-% Plot magnitude spectrum
-figure;
-plot(f, abs(H(1:length(f))));
-xlabel('Frequency (Hz)');
-ylabel('Magnitude');
-title('Magnitude Spectrum of Impulse Response');
-grid on;
-
-% Compute fitted IR
-ir_fit = ir_model(p_fit, t);
-
-% Only consider t > 0
-idx_pos = t > 0;
-ir_trimmed = ir(idx_pos);
-ir_fit_trimmed = ir_fit(idx_pos);
-
-% Compute correlation coefficient on t > 0
-R = corrcoef(ir_trimmed, ir_fit_trimmed);
-corr_val = R(1, 2);
-
-% Display result
-fprintf('Correlation coefficient between measured and fitted IR (t > 0): %.4f\n', corr_val);
-
-% Optional: Annotate correlation on plot
-figure;
-plot(t, ir, 'k', 'DisplayName', 'Measured IR'); hold on;
-plot(t, ir_fit, 'r--', 'DisplayName', 'Fitted Model');
-legend;
-title(sprintf('Impulse Response Fit (Corr = %.4f)', corr_val));
-xlabel('Time (s)');
-ylabel('Amplitude');
+% 
+% % Define time vector for IR
+% t = (-2500:2500) * Ts;
+% % FFT of the impulse response
+% L = length(ir);
+% H = fft(ir, 2^nextpow2(L));  % Zero-padding for better frequency resolution
+% f = Fs * (0:(length(ir)/2)) / length(ir);  % Frequency axis (up to Nyquist)
+% 
+% 
+% % Define model function
+% ir_model = @(p, t) p(1) * exp(-p(2)*t) .* sin(p(3)*t + p(4)) .* (t > 0);
+% 
+% % Initial guess: [A, damping*wn, wd, phase]
+% [~, idx_peak] = max(abs(fft(ir)));
+% f_guess = f(idx_peak);
+% p0 = [max(ir), 100, 2*pi*f_guess, 0];
+% 
+% 
+% % Cost function
+% cost = @(p) sum((ir(:) - ir_model(p, t(:))).^2);
+% 
+% % Fit using fminsearch
+% p_fit = fminsearch(cost, p0);
+% 
+% % Plot fit
+% figure;
+% plot(t, ir, 'k', 'DisplayName', 'Measured IR'); hold on;
+% plot(t, ir_model(p_fit, t), 'r--', 'DisplayName', 'Fitted Model');
+% legend;
+% title('Impulse Response Fit');
+% 
+% % Extract fitted parameters
+% A_fit = p_fit(1);
+% damping_wn = p_fit(2);
+% wd = p_fit(3);
+% phi = p_fit(4);
+% zeta = damping_wn / sqrt(wd^2 + damping_wn^2);
+% wn = damping_wn / zeta;
+% 
+% fprintf('Fitted parameters:\n');
+% fprintf('  A     = %.4f\n', A_fit);
+% fprintf('  ζ     = %.4f\n', zeta);
+% fprintf('  ω_n   = %.2f rad/s\n', wn);
+% fprintf('  f_n   = %.2f Hz\n', wn/(2*pi));
+% fprintf('  ω_d   = %.2f rad/s\n', wd);
+% 
+% 
+% 
+% % Calculate mass (m), spring constant (k), and damping coefficient (b)
+% % Assuming typical system response characteristics
+% % If you have an estimate for one of the parameters, use it, or assume reasonable values
+% m = 28.4/1000;  % Example mass (kg), you can change this based on your system
+% k = m * wn^2;   % Spring constant (N/m)
+% b = 2 * zeta * sqrt(m * k);  % Damping coefficient (Ns/m)
+% 
+% % Display results
+% fprintf('Physical Parameters from fit:\n');
+% fprintf('  Mass (m)       = %.2f kg\n', m);
+% fprintf('  Spring constant (k) = %.2f N/m\n', k);
+% fprintf('  Damping coefficient (b) = %.2f Ns/m\n', b);
+% 
+% 
+% 
+% 
+% % Plot magnitude spectrum
+% figure;
+% plot(f, abs(H(1:length(f))));
+% xlabel('Frequency (Hz)');
+% ylabel('Magnitude');
+% title('Magnitude Spectrum of Impulse Response');
+% grid on;
+% 
+% % Compute fitted IR
+% ir_fit = ir_model(p_fit, t);
+% 
+% % Only consider t > 0
+% idx_pos = t > 0;
+% ir_trimmed = ir(idx_pos);
+% ir_fit_trimmed = ir_fit(idx_pos);
+% 
+% % Compute correlation coefficient on t > 0
+% R = corrcoef(ir_trimmed, ir_fit_trimmed);
+% corr_val = R(1, 2);
+% 
+% % Display result
+% fprintf('Correlation coefficient between measured and fitted IR (t > 0): %.4f\n', corr_val);
+% 
+% % Optional: Annotate correlation on plot
+% figure;
+% plot(t, ir, 'k', 'DisplayName', 'Measured IR'); hold on;
+% plot(t, ir_fit, 'r--', 'DisplayName', 'Fitted Model');
+% legend;
+% title(sprintf('Impulse Response Fit (Corr = %.4f)', corr_val));
+% xlabel('Time (s)');
+% ylabel('Amplitude');

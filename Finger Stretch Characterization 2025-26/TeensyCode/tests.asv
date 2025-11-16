@@ -1,0 +1,82 @@
+clear
+close all
+
+serialPort = "COM4";  % Change to your Teensy port
+funs = signalGen(serialPort);
+
+dq = daq("ni");
+
+time = 10;  
+num_trials = 2;  % Define number of trials
+tvec = cell(1, num_trials);       % Store each time vector separately
+outputVec = cell(1, num_trials);  % Store channel 13 (output)
+inputVec = cell(1, num_trials);   % Store channel 5 (input)
+
+%% DAQ Configuration
+dq.Rate = 10000;
+channel_list = [13, 5];  % Read from channels 13 and 5
+addinput(dq, "Dev1", channel_list, "Voltage");
+
+%% Countdown Timer
+disp('Starting in:');
+for i = 5:-1:1  
+    fprintf('%d...\n', i);
+    pause(1);
+end
+
+%% Run Chirp Signals and Record Data
+for i = 1:num_trials
+    fprintf('Running chirp %d/%d...\n', i, num_trials);
+    
+    funs.lin_chirpWithEnvelope(30, 350, 0.8, 5, 10000);  % Start chirp signal
+    disp('Recording...');
+    
+    Data_dq = read(dq, seconds(time));  % Read DAQ data
+    
+    disp('Stopped...');
+    
+    % Store data properly
+    tvec{i} = Data_dq.Time * 1e3;  % Convert to milliseconds
+    outputVec{i} = Data_dq.("Dev1_ai13");  % Channel 13
+    inputVec{i} = Data_dq.("Dev1_ai5");    % Channel 5
+end
+
+clearSerialPort(serialPort);  % Close serial port properly
+
+%% Plot Results
+figure;
+hold on;
+for i = 1:num_trials
+    plot(tvec{i}, outputVec{i});
+end
+xlabel('Time (ms)');
+ylabel('Output Voltage (V)');
+title('Output Channel (13) - Chirp Response');
+legend(arrayfun(@(x) sprintf('Trial %d', x), 1:num_trials, 'UniformOutput', false));
+hold off;
+
+figure;
+hold on;
+for i = 1:num_trials
+    plot(tvec{i}, inputVec{i});
+end
+
+xlabel('Time (ms)');
+ylabel('Input Voltage (V)');
+title('Input Channel (5) - Chirp Response');
+legend(arrayfun(@(x) sprintf('Trial %d', x), 1:num_trials, 'UniformOutput', false));
+hold off;
+
+%% Save Data
+save('newTeensy_30-350_dualChannel.mat', 'inputVec', 'outputVec', 'tvec', '-v7.3');
+
+%% Function to Clear Serial Port
+function clearSerialPort(port)
+    serialObj = serialportfind('Port', port); % Find existing serial object
+    if ~isempty(serialObj)
+        fclose(serialObj);
+        delete(serialObj);
+        clear serialObj;
+    end
+    disp("Serial port cleared.");
+end
