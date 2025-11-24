@@ -23,7 +23,7 @@ disp(cmd);
 dq = daq("ni");
 dq.Rate = 10000;
 addinput(dq, "Dev1", [13 1], "Voltage");   % Channels 13 (output), 1 (input)
-
+ok aw
 % ===== ACQUIRE DATA =====
 disp("Recording...");
 data = read(dq, seconds(daqTime));
