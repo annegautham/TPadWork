@@ -44,18 +44,108 @@ classdef FingerpadChirpApp < matlab.apps.AppBase
         SessionFileName     % .mat session file
         SelectedRowIdx      % which condition row is selected
         CurrentTrialIdx     % trial 1..4 for the selected condition
+        BackupFileName  % autosave backup file
+        % DAQ
+        DAQ          % daq session object
+        DAQ_Rate = 10000;
+        DAQ_Channel = "Dev2_ai9";
+
+
 
         % --- INA219 data from last run ---
         LastINATime    double = []  % seconds
         LastINACurrent double = []  % amps
-        LastHXTime     double = []
-        LastHXValue    double = []
+        LastLDVTime double = []
+        LastLDVSignal double = []
+
     end
 
     %======================================================================
     % PRIVATE METHODS
     %======================================================================
     methods (Access = private)
+        function autoBackup(app)
+            try
+                sessionData = app.SessionData; %#ok<NASGU>
+                save(app.BackupFileName, 'sessionData', '-v7.3');
+                app.StatusLabel.Text = sprintf('Autosaved to %s', app.BackupFileName);
+            catch ME
+                app.StatusLabel.Text = sprintf('Autosave error: %s', ME.message);
+            end
+        end
+        function initDAQ(app)
+            try
+                app.DAQ = daq("ni");
+                app.DAQ.Rate = app.DAQ_Rate;
+                addinput(app.DAQ, "Dev2", 9, "Voltage");
+                app.StatusLabel.Text = sprintf("NI-DAQ configured: fs = %d Hz", app.DAQ_Rate);
+            catch ME
+                app.StatusLabel.Text = sprintf("DAQ init error: %s", ME.message);
+            end
+        end
+
+        function [t_ldv, y_ldv] = recordLDV(app, dur)
+            % Acquire LDV signal for 'dur' seconds during chirp
+            try
+                data = read(app.DAQ, seconds(dur));
+                t_ldv = data.Time;
+                y_ldv = data.(app.DAQ_Channel);
+            catch ME
+                app.StatusLabel.Text = sprintf("DAQ read error: %s", ME.message);
+                t_ldv = [];
+                y_ldv = [];
+            end
+        end
+
+
+
+
+        function onCloseApp(app)
+            selection = uiconfirm(app.UIFigure, ...
+                'Do you want to save before exiting?', ...
+                'Confirm Exit', ...
+                'Options', {'Save & Exit','Exit Without Saving','Cancel'}, ...
+                'DefaultOption', 1, ...
+                'CancelOption', 3);
+
+            switch selection
+                case 'Save & Exit'
+                    try
+                        sessionData = app.SessionData; %#ok<NASGU>
+                        save(app.SessionFileName, 'sessionData', '-v7.3');
+                        app.autoBackup();
+                    catch ME
+                        uialert(app.UIFigure, sprintf('Error saving: %s', ME.message), 'Save Error');
+                    end
+                    delete(app.UIFigure);
+
+                case 'Exit Without Saving'
+                    delete(app.UIFigure);
+
+                case 'Cancel'
+                    return;
+            end
+        end
+
+
+        function s = safeRead(app, sp)
+            % Safe readline: returns "" instead of throwing errors.
+            s = "";
+            if sp.NumBytesAvailable == 0
+                return;
+            end
+            try
+                line = readline(sp);
+                if ischar(line)
+                    s = string(strtrim(line));
+                elseif isstring(line)
+                    s = strtrim(line);
+                end
+            catch
+                s = "";
+            end
+        end
+
 
         function startupFcn(app)
             % Build the 175-condition grid: 7×5×5
@@ -105,6 +195,9 @@ classdef FingerpadChirpApp < matlab.apps.AppBase
             timestamp = datestr(now,'yyyymmdd_HHMMSS');
             app.SessionFileName = sprintf('fingerpad_session_%s.mat', timestamp);
             app.StatusLabel.Text = sprintf('Session file: %s', app.SessionFileName);
+            app.BackupFileName = [app.SessionFileName, '_backup.mat'];
+            app.initDAQ();
+
         end
 
         function createComponents(app)
@@ -113,6 +206,7 @@ classdef FingerpadChirpApp < matlab.apps.AppBase
             app.UIFigure = uifigure('Name','Fingerpad Chirp Experiment');
             app.UIFigure.Position = [100 100 1350 700];
             app.UIFigure.Color = [0.98 0.98 0.98];
+            app.UIFigure.CloseRequestFcn = @(src,evt) app.onCloseApp();
 
             % ============================================================
             % LEFT PANEL — Trial Table
@@ -251,9 +345,9 @@ classdef FingerpadChirpApp < matlab.apps.AppBase
             % Top axes — expected chirp
             app.ChirpAxes = uiaxes(plotPanel);
             app.ChirpAxes.Position = [20 170 720 150];
-            title(app.ChirpAxes, 'Expected Chirp');
+            title(app.ChirpAxes, 'LDV Recording');
             xlabel(app.ChirpAxes,'Time (s)');
-            ylabel(app.ChirpAxes,'Norm amplitude');
+            ylabel(app.ChirpAxes,'Amplitude');
 
             % Bottom axes — INA current
             app.INAaxes = uiaxes(plotPanel);
@@ -352,8 +446,13 @@ classdef FingerpadChirpApp < matlab.apps.AppBase
                 return;
             end
 
+            % Start DAQ acquisition in background
+            dur = app.DurField.Value;
+            fut = read(app.DAQ, seconds(dur), "OutputFormat","Matrix","Background",true);
+
+
             % ---------- listen for STARTED / INA data / DONE ----------
-            % ---------- robust Teensy reader (full INA capture) ----------
+            % ---------- listen for STARTED / INA data / DONE ----------
             rawLines  = strings(0,1);
             N_expected = -1;
             startedSeen = false;
@@ -363,20 +462,17 @@ classdef FingerpadChirpApp < matlab.apps.AppBase
             % -------- STEP 1 — wait for "STARTED" and "INA N" --------
             while toc(tStart) < (dur + 5)
                 if app.Teensy.NumBytesAvailable > 0
-                    line = strtrim(readline(app.Teensy));
-                    sline = string(line);
-                    rawLines(end+1) = sline;   %#ok<AGROW>
+                    line = app.safeRead(app.Teensy);
+                    rawLines(end+1) = line;
 
-                    % STARTED arrives first
-                    if strcmp(line,"STARTED")
+                    if line == "STARTED"
                         app.StatusLabel.Text = "Chirp started...";
                         startedSeen = true;
                     end
 
-                    % INA header: “INA N”
                     if startsWith(line,"INA ")
                         N_expected = str2double(extractAfter(line,"INA "));
-                        break;   % stop scanning; go to fixed-count read
+                        break;
                     end
                 end
                 pause(0.005);
@@ -387,19 +483,19 @@ classdef FingerpadChirpApp < matlab.apps.AppBase
                 return;
             end
 
-            % -------- STEP 2 — read EXACTLY N_expected data lines --------
+            % -------- STEP 2 — read EXACTLY N_expected lines --------
             for k = 1:N_expected
-                line = strtrim(readline(app.Teensy));
-                rawLines(end+1) = string(line); %#ok<AGROW>
+                line = app.safeRead(app.Teensy);
+                rawLines(end+1) = line;
             end
 
-            % -------- STEP 3 — continue reading until DONE --------
+            % -------- STEP 3 — read until DONE --------
             doneSeen = false;
             while toc(tStart) < (dur + 5)
                 if app.Teensy.NumBytesAvailable > 0
-                    line = strtrim(readline(app.Teensy));
-                    rawLines(end+1) = string(line); %#ok<AGROW>
-                    if strcmp(line,"DONE")
+                    line = app.safeRead(app.Teensy);
+                    rawLines(end+1) = line;
+                    if line == "DONE"
                         doneSeen = true;
                         break;
                     end
@@ -407,82 +503,76 @@ classdef FingerpadChirpApp < matlab.apps.AppBase
                 pause(0.005);
             end
 
+
             if ~doneSeen
                 app.StatusLabel.Text = "WARNING: did not see DONE (but data captured).";
             else
                 app.StatusLabel.Text = sprintf("Chirp finished. INA samples: %d.", N_expected);
             end
+            
+            % Retrieve LDV
+            try
+                dataLDV = fetch(fut);
+                tLDV = dataLDV.Time;
+                yLDV = dataLDV.(app.DAQ_Channel);
+            catch
+                tLDV = [];
+                yLDV = [];
+            end
+            
+            app.LastLDVTime = tLDV;
+            app.LastLDVSignal = yLDV;
 
 
             % ---------- Parse INA219 data from rawLines ----------
-            % =====================================================
-            % PARSE RETURNED DATA BLOCKS (INA + HX)
-            % =====================================================
-
             app.LastINATime    = [];
             app.LastINACurrent = [];
-            app.LastHXTime     = [];
-            app.LastHXValue    = [];
 
-            if isempty(rawLines)
-                app.StatusLabel.Text = 'Chirp finished. No data returned.';
-            else
-
-                % ----------- Locate headers -----------
-                idxINA  = find(startsWith(rawLines,"INA "),1,'first');
-                idxHX   = find(startsWith(rawLines,"HX "),1,'first');
-                idxDONE = find(strcmp(rawLines,"DONE"),1,'first');
-
-                % ----------------- INA DATA -----------------
-                if ~isempty(idxINA)
-                    N = str2double(extractAfter(rawLines(idxINA),"INA "));
+            if ~isempty(rawLines)
+                % Look for "INA N" header
+                idxHeader = find(startsWith(rawLines,"INA "),1,'first');
+                if ~isempty(idxHeader)
+                    % Parse N
+                    headerStr = rawLines(idxHeader);
+                    N = str2double(strtrim(erase(headerStr,"INA")));
                     if isnan(N), N = 0; end
-                    first = idxINA + 1;
-                    last  = min(first + N - 1, numel(rawLines));
 
-                    t = nan(N,1);  i = nan(N,1);
-                    for k = 1:(last-first+1)
-                        vals = sscanf(rawLines(first+k-1), "%f,%f");
-                        if numel(vals)==2
-                            t(k) = vals(1);  i(k)=vals(2);
+                    nAvail = min(N, numel(rawLines) - idxHeader);
+                    if nAvail > 0
+                        dataLines = rawLines(idxHeader+1 : idxHeader+nAvail);
+                        t = nan(nAvail,1);
+                        i = nan(nAvail,1);
+                        for k = 1:nAvail
+                            vals = sscanf(dataLines(k), '%f,%f');
+                            if numel(vals) == 2
+                                t(k) = vals(1);
+                                i(k) = vals(2);
+                            end
                         end
+                        mask = ~isnan(t) & ~isnan(i);
+                        app.LastINATime    = t(mask);
+                        app.LastINACurrent = i(mask);
+                        app.StatusLabel.Text = sprintf('Chirp finished. INA samples: %d.', numel(app.LastINATime));
+                    else
+                        app.StatusLabel.Text = 'Chirp finished. INA header found but no data lines.';
                     end
-                    mask = ~isnan(t) & ~isnan(i);
-                    app.LastINATime    = t(mask);
-                    app.LastINACurrent = i(mask);
+                else
+                    app.StatusLabel.Text = 'Chirp finished. No INA header found.';
                 end
-
-                % ----------------- HX DATA -----------------
-                if ~isempty(idxHX)
-                    M = str2double(extractAfter(rawLines(idxHX),"HX "));
-                    if isnan(M), M = 0; end
-                    first = idxHX + 1;
-                    last  = min(first + M - 1, numel(rawLines));
-
-                    t = nan(M,1);  v = nan(M,1);
-                    for k = 1:(last-first+1)
-                        vals = sscanf(rawLines(first+k-1), "%f,%f");
-                        if numel(vals)==2
-                            t(k) = vals(1);  v(k)=vals(2);
-                        end
-                    end
-                    mask = ~isnan(t) & ~isnan(v);
-                    app.LastHXTime  = t(mask);
-                    app.LastHXValue = v(mask);
-                end
-
-                app.StatusLabel.Text = sprintf("INA=%d   HX=%d samples", ...
-                    numel(app.LastINATime), numel(app.LastHXTime));
-
+            else
+                app.StatusLabel.Text = 'Chirp finished. No INA data received.';
             end
 
-
-            % Plot expected chirp (for now; DAQ later)
-            [tChirp, yNorm] = app.generateExpectedChirp(f1, f2, dur, env, fs);
-            plot(app.ChirpAxes, tChirp, yNorm);
+        if ~isempty(app.LastLDVTime)
+            plot(app.ChirpAxes, app.LastLDVTime, app.LastLDVSignal);
             xlabel(app.ChirpAxes,'Time (s)');
-            ylabel(app.ChirpAxes,'Norm amplitude');
-            title(app.ChirpAxes, sprintf('Expected chirp (Trial %d of 4)', app.CurrentTrialIdx));
+            ylabel(app.ChirpAxes,'Velocity (V or mm/s)');
+            title(app.ChirpAxes, sprintf('LDV Recording (Trial %d)', app.CurrentTrialIdx));
+        else
+            plot(app.ChirpAxes, tChirp, yNorm);
+            title(app.ChirpAxes,'Expected chirp (NO LDV DATA)');
+        end
+
 
             app.AcceptButton.Enable = 'on';
             app.RetakeButton.Enable = 'on';
@@ -498,19 +588,7 @@ classdef FingerpadChirpApp < matlab.apps.AppBase
                 title(app.INAaxes, 'INA219 Current (no data)');
             end
 
-            % ========== Plot HX711 data (if available) ==========
-            if ~isempty(app.LastHXTime)
-                hold(app.INAaxes,'on');
-                plot(app.INAaxes, app.LastHXTime, ...
-                    app.LastHXValue / max(abs(app.LastHXValue)), 'r-');
-                legend(app.INAaxes, {'INA Current','HX Load'}, 'Location','best');
-                hold(app.INAaxes,'off');
-            end
-
-
         end
-
-
 
         % ---------- Generate expected chirp ----------
         function [t, yNorm] = generateExpectedChirp(app, f1, f2, dur, env, fs) %#ok<INUSL>
@@ -574,7 +652,7 @@ classdef FingerpadChirpApp < matlab.apps.AppBase
 
             condStruct = app.SessionData.conditions(condIdx);
             if isempty(condStruct.trials)
-                condtruct.trials = trialStruct;
+                condStruct.trials = trialStruct;
             else
                 idx = app.CurrentTrialIdx;
                 if length(condStruct.trials) < idx
@@ -594,6 +672,8 @@ classdef FingerpadChirpApp < matlab.apps.AppBase
             try
                 sessionData = app.SessionData; %#ok<NASGU>
                 save(app.SessionFileName, 'sessionData', '-v7.3');
+                app.autoBackup();
+
                 app.StatusLabel.Text = sprintf( ...
                     'Accepted trial %d/4 for condition row %d. Session saved.', ...
                     app.CurrentTrialIdx, row);

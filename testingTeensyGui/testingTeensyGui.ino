@@ -2,7 +2,6 @@
 #include <Wire.h>
 #include <IntervalTimer.h>
 #include <Adafruit_INA219.h>
-#include "HX711.h"
 
 // ========================================================
 // PIN DEFINITIONS
@@ -10,13 +9,12 @@
 #define DAC_CS   10
 #define SYNC_PIN 5
 
-// HX711 PINS
+// HX711 pins
 #define HX_DT   6
 #define HX_SCK  7
 
-// INA219 I2C address
-const uint8_t INA_ADDR = 0x40;
-const uint8_t INA_BYTES = 2;
+// INA219
+const uint8_t INA_ADDR  = 0x40;
 
 // ========================================================
 // CHIRP BUFFER
@@ -24,9 +22,9 @@ const uint8_t INA_BYTES = 2;
 #define BUFFER_SIZE 60000
 
 DMAMEM uint16_t dacBuffer[BUFFER_SIZE];
-volatile uint32_t sampleIndex = 0;
-volatile uint32_t totalSamples = 0;
-volatile bool     playing      = false;
+volatile uint32_t sampleIndex   = 0;
+volatile uint32_t totalSamples  = 0;
+volatile bool     playing       = false;
 
 IntervalTimer dacTimer;
 IntervalTimer inaTimer;
@@ -43,24 +41,14 @@ volatile uint32_t inaCount = 0;
 
 volatile bool collectingINA  = false;
 volatile bool inaSampleFlag  = false;
+
 uint32_t chirpStart_us       = 0;
 
-const uint32_t INA_INTERVAL_US = 400;  // 2.5 kHz target
+const uint32_t INA_INTERVAL_US = 400; // ~2.5 kHz
+
 
 // ========================================================
-// HX711 BUFFERS (80 Hz)
-// ========================================================
-HX711 hx;
-
-#define HX_BUFFER_SIZE 400
-DMAMEM double hxTime[HX_BUFFER_SIZE];
-DMAMEM double hxVal[HX_BUFFER_SIZE];
-volatile uint32_t hxCount = 0;
-
-long hx_offset = 0;
-
-// ========================================================
-// SPI DAC WRITE
+// WRITE TO MCP4921 DAC
 // ========================================================
 void writeDAC(uint16_t value) {
   digitalWrite(DAC_CS, LOW);
@@ -69,13 +57,15 @@ void writeDAC(uint16_t value) {
 }
 
 // ========================================================
-// TIMER ISR — OUTPUT ONE DAC SAMPLE
+// DAC TIMER ISR — OUTPUT ONE SAMPLE
 // ========================================================
 void outputSampleISR() {
   if (sampleIndex < totalSamples) {
+
     writeDAC(dacBuffer[sampleIndex++]);
+
   } else {
-    // END OF CHIRP
+    // End chirp
     dacTimer.end();
     writeDAC(2048);
     digitalWrite(SYNC_PIN, LOW);
@@ -89,21 +79,11 @@ void outputSampleISR() {
     // ----------------------------
     Serial.print("INA ");
     Serial.println(inaCount);
+
     for (uint32_t i = 0; i < inaCount; i++) {
       Serial.print(timeBuffer[i], 6);
       Serial.print(",");
       Serial.println(currentBuffer[i], 6);
-    }
-
-    // ----------------------------
-    // OUTPUT HX DATA
-    // ----------------------------
-    Serial.print("HX ");
-    Serial.println(hxCount);
-    for (uint32_t i = 0; i < hxCount; i++) {
-      Serial.print(hxTime[i], 6);
-      Serial.print(",");
-      Serial.println(hxVal[i], 4);
     }
 
     Serial.println("DONE");
@@ -111,22 +91,21 @@ void outputSampleISR() {
 }
 
 // ========================================================
-// INA TIMER ISR
+// INA TIMER ISR — Set flag for main loop
 // ========================================================
 void inaTimerISR() {
-  if (collectingINA) {
+  if (collectingINA)
     inaSampleFlag = true;
-  }
 }
 
 // ========================================================
-// CHIRP GENERATION
+// GENERATE CHIRP
 // ========================================================
-float f1  = 30.0f;
-float f2  = 350.0f;
-float dur = 5.0f;
-float env = 0.8f;
-float fs  = 10000.0f;
+float f1  = 30;
+float f2  = 350;
+float dur = 5;
+float env = 0.8;
+float fs  = 10000;
 
 void generateChirp() {
   totalSamples = (uint32_t)(dur * fs);
@@ -149,19 +128,28 @@ void generateChirp() {
 }
 
 // ========================================================
-// INA219 HIGH-SPEED CONFIG
+// INA219 HIGH-SPEED CONFIG FIXED
 // ========================================================
 void configureINA219HighSpeed() {
+
   ina219.begin();
-  ina219.setCalibration_32V_2A();
+  ina219.setCalibration_32V_2A();   // defines Current_LSB = 100 µA
 
   const uint8_t REG_CONFIG = 0x00;
+
+  // Correct settings:
+  // BRNG = 32V   → 1
+  // PG   = ±320mV → 3
+  // BADC = 12-bit → 3
+  // SADC = 12-bit → 3
+  // MODE = shunt continuous → 7
+
   uint16_t config =
-      (1 << 13) |
-      (0 << 11) |
-      (0x0 << 7) |
-      (0x0 << 3) |
-      0x7;
+      (1 << 13) |   // BRNG = 32V
+      (3 << 11) |   // PG = ±320mV
+      (3 << 7)  |   // BADC = 12-bit
+      (3 << 3)  |   // SADC = 12-bit
+      0x7;          // MODE = continuous shunt
 
   Wire.beginTransmission(INA_ADDR);
   Wire.write(REG_CONFIG);
@@ -171,59 +159,61 @@ void configureINA219HighSpeed() {
 }
 
 // ========================================================
-// INA219 RAW
+// READ CURRENT REGISTER (0x04) — FIXED
 // ========================================================
 bool readINA219Once(double &current_A) {
-  const uint8_t REG_SHUNT = 0x01;
+
+  const uint8_t REG_CURRENT = 0x04;  // <-- IMPORTANT
 
   Wire.beginTransmission(INA_ADDR);
-  Wire.write(REG_SHUNT);
+  Wire.write(REG_CURRENT);
   Wire.endTransmission(false);
 
-  Wire.requestFrom(INA_ADDR, INA_BYTES);
-  if (Wire.available() < 2) return false;
+  Wire.requestFrom(INA_ADDR, (uint8_t)2);
+  if (Wire.available() < 2)
+    return false;
 
   int16_t raw = (Wire.read() << 8) | Wire.read();
-  float shunt_mV = raw * 0.01f;
-  float I = (shunt_mV / 1000.0f) / 0.33f;
-  current_A = I;
+
+  // From calibration_32V_2A: Current_LSB = 100 µA
+  current_A = raw * 0.0001;
+
   return true;
 }
 
 // ========================================================
-// HANDLE CHIRP COMMAND
+// HANDLE 'CHIRP ...' COMMAND
 // ========================================================
 void handleChirpCommand(const String &line) {
   char cmd[16];
   float pf1, pf2, pdur, penv, pfs;
 
-  int nParsed = sscanf(line.c_str(), "%15s %f %f %f %f %f",
-                       cmd, &pf1, &pf2, &pdur, &penv, &pfs);
+  int n = sscanf(line.c_str(), "%15s %f %f %f %f %f",
+                 cmd, &pf1, &pf2, &pdur, &penv, &pfs);
 
-  if (nParsed != 6 || String(cmd) != "CHIRP") {
+  if (n != 6 || String(cmd) != "CHIRP") {
     Serial.println("ERR BAD_CMD");
     return;
   }
 
-  f1 = pf1; f2 = pf2; dur = pdur; env = penv; fs = pfs;
-
-  if (fs <= 0) fs = 10000;
-  if (dur <= 0) dur = 5.0;
-  if (env < 0) env = 0;
-  if (env > 1) env = 1;
+  f1 = pf1;
+  f2 = pf2;
+  dur = pdur;
+  env = penv;
+  fs = pfs;
 
   generateChirp();
 
-  sampleIndex = 0;
-  inaCount = 0;
-  hxCount  = 0;
-  playing = true;
+  sampleIndex   = 0;
+  inaCount      = 0;
+  playing       = true;
   collectingINA = true;
   inaSampleFlag = false;
 
   chirpStart_us = micros();
 
   float dt_us = 1e6f / fs;
+
   digitalWrite(SYNC_PIN, HIGH);
   dacTimer.begin(outputSampleISR, (unsigned long)dt_us);
   inaTimer.begin(inaTimerISR, INA_INTERVAL_US);
@@ -235,6 +225,7 @@ void handleChirpCommand(const String &line) {
 // SETUP
 // ========================================================
 void setup() {
+
   Serial.begin(115200);
   delay(200);
 
@@ -251,30 +242,6 @@ void setup() {
 
   configureINA219HighSpeed();
 
-  // -------------------------
-  // HX711 SETUP
-  // -------------------------
-  hx.begin(HX_DT, HX_SCK);
-
-  // Force 80 Hz mode
-  pinMode(HX_SCK, OUTPUT);
-  digitalWrite(HX_SCK, HIGH);
-  delay(1);
-  digitalWrite(HX_SCK, LOW);
-  delay(5);
-
-  hx.set_gain(128);
-  delay(50);
-
-  long sum = 0;
-  for (int i = 0; i < 50; i++) {
-    while (!hx.is_ready());
-    sum += hx.read();
-  }
-  hx_offset = sum / 50;
-
-  Serial.print("HX711 offset=");
-  Serial.println(hx_offset);
 
   Serial.println("READY");
 }
@@ -284,9 +251,7 @@ void setup() {
 // ========================================================
 void loop() {
 
-  // -------------------------------
-  // Command parser
-  // -------------------------------
+  // Receive commands
   if (Serial.available()) {
     String line = Serial.readStringUntil('\n');
     line.trim();
@@ -294,33 +259,19 @@ void loop() {
       handleChirpCommand(line);
   }
 
-  // -------------------------------
-  // INA219 samples
-  // -------------------------------
+  // INA219 sampling
   if (collectingINA && inaSampleFlag) {
     inaSampleFlag = false;
 
     if (inaCount < INA_BUFFER_SIZE) {
-      double current_A;
-      if (readINA219Once(current_A)) {
+      double I;
+      if (readINA219Once(I)) {
         double t = (double)(micros() - chirpStart_us) * 1e-6;
         timeBuffer[inaCount]    = t;
-        currentBuffer[inaCount] = current_A;
+        currentBuffer[inaCount] = I;
         inaCount++;
       }
     }
   }
 
-  // -------------------------------
-  // HX711 samples (~80 Hz)
-  // -------------------------------
-  if (collectingINA && hx.is_ready()) {
-    if (hxCount < HX_BUFFER_SIZE) {
-      long raw = hx.read() - hx_offset;
-      double t = (double)(micros() - chirpStart_us) * 1e-6;
-      hxTime[hxCount] = t;
-      hxVal[hxCount]  = (double)raw;
-      hxCount++;
-    }
-  }
 }

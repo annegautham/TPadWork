@@ -5,6 +5,7 @@ figure;
 
 BL = 2.7;
 in = BL*i_t;
+%% 
 
 load('18g_30-350.mat');
 
@@ -26,6 +27,7 @@ lag = lags(max_idx);
 if lag >= 0
     pos = pos(lag+1:end);
 end
+
 
 N_sync = min(length(in), length(pos));
 in = in(1:N_sync);
